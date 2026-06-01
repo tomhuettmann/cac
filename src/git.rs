@@ -1,0 +1,161 @@
+use git2::{Oid, Repository, Sort};
+use std::collections::HashSet;
+use std::path::Path;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Contributor {
+    pub name: String,
+    pub email: String,
+}
+
+impl Contributor {
+    pub fn display(&self) -> String {
+        format!("{} <{}>", self.name, self.email)
+    }
+}
+
+pub fn open_repo(path: &Path) -> Result<Repository, git2::Error> {
+    Repository::discover(path)
+}
+
+pub fn get_contributors(repo: &Repository, max_commits: usize) -> Result<(Vec<Contributor>, bool), git2::Error> {
+    get_contributors_page(repo, max_commits, 0, &HashSet::new())
+}
+
+pub fn get_contributors_page(
+    repo: &Repository,
+    page_size: usize,
+    skip: usize,
+    already_seen: &HashSet<Contributor>,
+) -> Result<(Vec<Contributor>, bool), git2::Error> {
+    let mut revwalk = repo.revwalk()?;
+    revwalk.push_head()?;
+    revwalk.set_sorting(Sort::TIME)?;
+
+    let myself = get_current_user(repo);
+    let mut seen = already_seen.clone();
+    let mut contributors = Vec::new();
+    let mut all_scanned = true;
+
+    for (i, oid) in revwalk.enumerate() {
+        if i < skip {
+            continue;
+        }
+        if i >= skip + page_size {
+            all_scanned = false;
+            break;
+        }
+        let oid = oid?;
+        let commit = repo.find_commit(oid)?;
+        let author = commit.author();
+
+        let name = author.name().unwrap_or("").to_string();
+        let email = author.email().unwrap_or("").to_string();
+
+        if name.is_empty() || email.is_empty() {
+            continue;
+        }
+
+        if email.contains("noreply.github.com") {
+            continue;
+        }
+
+        if let Some(ref me) = myself {
+            if me.email == email {
+                continue;
+            }
+        }
+
+        let contributor = Contributor { name, email };
+        if seen.insert(contributor.clone()) {
+            contributors.push(contributor);
+        }
+    }
+
+    Ok((contributors, all_scanned))
+}
+
+pub fn get_latest_commit_info(repo: &Repository) -> Result<(String, Oid), git2::Error> {
+    let head = repo.head()?;
+    let commit = head.peel_to_commit()?;
+    let message = commit.message().unwrap_or("").to_string();
+    Ok((message, commit.id()))
+}
+
+pub fn amend_with_coauthors(
+    repo: &Repository,
+    original_msg: &str,
+    coauthors: &[Contributor],
+) -> Result<(), git2::Error> {
+    let head = repo.head()?;
+    let commit = head.peel_to_commit()?;
+
+    // Strip existing co-author trailers to avoid duplicates
+    let base_msg = strip_coauthor_trailers(original_msg);
+
+    // Build new message with co-author trailers
+    let mut new_msg = base_msg.trim_end().to_string();
+    new_msg.push_str("\n");
+    for author in coauthors {
+        new_msg.push_str(&format!("\nCo-authored-by: {} <{}>", author.name, author.email));
+    }
+    new_msg.push('\n');
+
+    let tree = commit.tree()?;
+    let committer = repo.signature()?;
+
+    commit.amend(
+        Some("HEAD"),
+        None,
+        Some(&committer),
+        None,
+        Some(&new_msg),
+        Some(&tree),
+    )?;
+
+    Ok(())
+}
+
+fn strip_coauthor_trailers(msg: &str) -> String {
+    msg.lines()
+        .filter(|line| {
+            !line.trim_start().to_lowercase().starts_with("co-authored-by:")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn get_current_user(repo: &Repository) -> Option<Contributor> {
+    let config = repo.config().ok()?;
+    let name = config.get_string("user.name").ok()?;
+    let email = config.get_string("user.email").ok()?;
+    Some(Contributor { name, email })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_strip_coauthor_trailers() {
+        let msg = "feat: add feature\n\nCo-authored-by: Alice <alice@example.com>\nCo-authored-by: Bob <bob@example.com>\n";
+        let result = strip_coauthor_trailers(msg);
+        assert_eq!(result, "feat: add feature\n");
+    }
+
+    #[test]
+    fn test_strip_coauthor_preserves_body() {
+        let msg = "feat: add feature\n\nThis is a body.\n";
+        let result = strip_coauthor_trailers(msg);
+        assert_eq!(result, "feat: add feature\n\nThis is a body.");
+    }
+
+    #[test]
+    fn test_contributor_display() {
+        let c = Contributor {
+            name: "Alice".to_string(),
+            email: "alice@example.com".to_string(),
+        };
+        assert_eq!(c.display(), "Alice <alice@example.com>");
+    }
+}
