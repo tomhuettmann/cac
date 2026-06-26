@@ -20,7 +20,7 @@ A fast terminal UI tool to amend your latest git commit with co-authors.
 │   Alina Mueller <alina@example.com>                  │
 │   Ali Hassan <ali.hassan@example.com>                │
 └──────────────────────────────────────────────────────┘
- ↑↓ navigate   Tab toggle   l load more   Enter confirm   Esc cancel
+ ↑↓ navigate   Tab toggle   Enter confirm   Esc cancel
 ```
 
 ## Workflow
