@@ -20,7 +20,7 @@ impl App {
         commit_id: Oid,
     ) -> Self {
         let filtered: Vec<usize> = (0..contributors.len()).collect();
-        Self {
+        let mut app = Self {
             contributors,
             filtered,
             selected: Vec::new(),
@@ -30,7 +30,32 @@ impl App {
             commit_id,
             should_quit: false,
             confirmed: false,
+        };
+        app.sort_filtered();
+        app
+    }
+
+    /// Reorders `filtered` to pin selected contributors at the top,
+    /// in the order they were selected, followed by unselected contributors.
+    fn sort_filtered(&mut self) {
+        let mut selected_indices = Vec::new();
+        let mut unselected_indices = Vec::new();
+
+        for &idx in &self.filtered {
+            if self.is_selected(idx) {
+                selected_indices.push(idx);
+            } else {
+                unselected_indices.push(idx);
+            }
         }
+
+        // Sort selected_indices to match their order in self.selected
+        selected_indices.sort_by_key(|&idx| {
+            self.selected.iter().position(|&s| s == idx).unwrap_or(usize::MAX)
+        });
+
+        // Pin selected to top, followed by unselected
+        self.filtered = [selected_indices, unselected_indices].concat();
     }
 
     pub fn filter(&mut self) {
@@ -60,6 +85,8 @@ impl App {
         } else if self.cursor >= self.filtered.len() {
             self.cursor = self.filtered.len() - 1;
         }
+
+        self.sort_filtered();
     }
 
     pub fn toggle_selected(&mut self) {
@@ -68,6 +95,14 @@ impl App {
                 self.selected.remove(pos);
             } else {
                 self.selected.push(idx);
+            }
+
+            // Re-sort filtered to pin selected at top
+            self.sort_filtered();
+
+            // Make cursor follow the toggled item to its new position
+            if let Some(new_pos) = self.filtered.iter().position(|&i| i == idx) {
+                self.cursor = new_pos;
             }
         }
     }

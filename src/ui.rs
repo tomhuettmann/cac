@@ -125,30 +125,41 @@ fn draw_search(f: &mut ratatui::Frame, app: &App, area: Rect) {
 }
 
 fn draw_list(f: &mut ratatui::Frame, app: &App, area: Rect) {
-    let items: Vec<ListItem> = app
-        .filtered
-        .iter()
-        .enumerate()
-        .map(|(i, &contributor_idx)| {
-            let contributor = &app.contributors[contributor_idx];
-            let selected = if app.is_selected(contributor_idx) {
-                "✓ "
-            } else {
-                "  "
-            };
-            let style = if i == app.cursor {
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::White)
-                    .add_modifier(Modifier::BOLD)
-            } else if app.is_selected(contributor_idx) {
-                Style::default().fg(Color::Green)
-            } else {
-                Style::default()
-            };
-            ListItem::new(format!("{}{}", selected, contributor.display())).style(style)
-        })
-        .collect();
+    // Build items with a separator between selected and unselected
+    let mut items: Vec<ListItem> = Vec::new();
+
+    let mut in_selected_section = false;
+    let mut separator_added = false;
+
+    for (i, &contributor_idx) in app.filtered.iter().enumerate() {
+        let is_selected = app.is_selected(contributor_idx);
+
+        // Add separator when transitioning from selected to unselected
+        if in_selected_section && !is_selected && !separator_added {
+            items.push(ListItem::new("─".repeat(50)).style(Style::default().fg(Color::DarkGray)));
+            separator_added = true;
+        }
+
+        in_selected_section = is_selected;
+
+        let contributor = &app.contributors[contributor_idx];
+        let selected = if is_selected {
+            "✓ "
+        } else {
+            "  "
+        };
+        let style = if i == app.cursor {
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::White)
+                .add_modifier(Modifier::BOLD)
+        } else if is_selected {
+            Style::default().fg(Color::Green)
+        } else {
+            Style::default()
+        };
+        items.push(ListItem::new(format!("{}{}", selected, contributor.display())).style(style));
+    }
 
     let title = format!(" Contributors ({}) ", app.filtered.len());
     let list = List::new(items)
