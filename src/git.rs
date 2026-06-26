@@ -18,33 +18,16 @@ pub fn open_repo(path: &Path) -> Result<Repository, git2::Error> {
     Repository::discover(path)
 }
 
-pub fn get_contributors(repo: &Repository, max_commits: usize) -> Result<(Vec<Contributor>, bool), git2::Error> {
-    get_contributors_page(repo, max_commits, 0, &HashSet::new())
-}
-
-pub fn get_contributors_page(
-    repo: &Repository,
-    page_size: usize,
-    skip: usize,
-    already_seen: &HashSet<Contributor>,
-) -> Result<(Vec<Contributor>, bool), git2::Error> {
+pub fn get_contributors(repo: &Repository) -> Result<Vec<Contributor>, git2::Error> {
     let mut revwalk = repo.revwalk()?;
     revwalk.push_head()?;
     revwalk.set_sorting(Sort::TIME)?;
 
     let myself = get_current_user(repo);
-    let mut seen = already_seen.clone();
+    let mut seen = HashSet::new();
     let mut contributors = Vec::new();
-    let mut all_scanned = true;
 
-    for (i, oid) in revwalk.enumerate() {
-        if i < skip {
-            continue;
-        }
-        if i >= skip + page_size {
-            all_scanned = false;
-            break;
-        }
+    for oid in revwalk {
         let oid = oid?;
         let commit = repo.find_commit(oid)?;
         let author = commit.author();
@@ -72,7 +55,7 @@ pub fn get_contributors_page(
         }
     }
 
-    Ok((contributors, all_scanned))
+    Ok(contributors)
 }
 
 pub fn get_latest_commit_info(repo: &Repository) -> Result<(String, Oid), git2::Error> {

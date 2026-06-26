@@ -1,5 +1,5 @@
 use crate::app::App;
-use crate::git::{self, Contributor};
+use crate::git::Contributor;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
@@ -14,10 +14,9 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
-use std::collections::HashSet;
 use std::io;
 
-pub fn run(app: &mut App, repo: &Repository) -> io::Result<Vec<Contributor>> {
+pub fn run(app: &mut App, _repo: &Repository) -> io::Result<Vec<Contributor>> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -60,9 +59,6 @@ pub fn run(app: &mut App, repo: &Repository) -> io::Result<Vec<Contributor>> {
                     app.search.pop();
                     app.filter();
                 }
-                KeyCode::Char('l') if !app.all_scanned => {
-                    load_more(app, repo);
-                }
                 KeyCode::Char(c) => {
                     app.search.push(c);
                     app.filter();
@@ -79,15 +75,6 @@ pub fn run(app: &mut App, repo: &Repository) -> io::Result<Vec<Contributor>> {
         Ok(app.get_selected_contributors())
     } else {
         Ok(vec![])
-    }
-}
-
-fn load_more(app: &mut App, repo: &Repository) {
-    let already_seen: HashSet<Contributor> = app.contributors.iter().cloned().collect();
-    if let Ok((new_contributors, all_scanned)) =
-        git::get_contributors_page(repo, app.page_size, app.total_scanned, &already_seen)
-    {
-        app.load_more(new_contributors, all_scanned);
     }
 }
 
@@ -163,15 +150,7 @@ fn draw_list(f: &mut ratatui::Frame, app: &App, area: Rect) {
         })
         .collect();
 
-    let title = if app.all_scanned {
-        format!(" Contributors ({}) — all scanned ", app.filtered.len())
-    } else {
-        format!(
-            " Contributors ({}) — scanned {} commits ",
-            app.filtered.len(),
-            app.total_scanned
-        )
-    };
+    let title = format!(" Contributors ({}) ", app.filtered.len());
     let list = List::new(items)
         .block(Block::default().borders(Borders::ALL).title(title))
         .highlight_style(Style::default());
@@ -181,23 +160,17 @@ fn draw_list(f: &mut ratatui::Frame, app: &App, area: Rect) {
     f.render_stateful_widget(list, area, &mut list_state);
 }
 
-fn draw_help(f: &mut ratatui::Frame, app: &App, area: Rect) {
-    let mut spans = vec![
+fn draw_help(f: &mut ratatui::Frame, _app: &App, area: Rect) {
+    let spans = vec![
         Span::styled(" ↑↓ ", Style::default().fg(Color::Yellow)),
         Span::raw("navigate  "),
         Span::styled(" Tab ", Style::default().fg(Color::Yellow)),
         Span::raw("toggle  "),
+        Span::styled(" Enter ", Style::default().fg(Color::Yellow)),
+        Span::raw("confirm  "),
+        Span::styled(" Esc ", Style::default().fg(Color::Yellow)),
+        Span::raw("cancel"),
     ];
-
-    if !app.all_scanned {
-        spans.push(Span::styled(" l ", Style::default().fg(Color::Yellow)));
-        spans.push(Span::raw("load more  "));
-    }
-
-    spans.push(Span::styled(" Enter ", Style::default().fg(Color::Yellow)));
-    spans.push(Span::raw("confirm  "));
-    spans.push(Span::styled(" Esc ", Style::default().fg(Color::Yellow)));
-    spans.push(Span::raw("cancel"));
 
     let help = Line::from(spans);
     let paragraph = Paragraph::new(help);

@@ -12,10 +12,6 @@ struct Cli {
     /// Git repository directory (default: current directory)
     #[arg(short, long)]
     directory: Option<PathBuf>,
-
-    /// Number of commits to scan per page
-    #[arg(short, long, default_value = "100")]
-    num_commits: usize,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -23,15 +19,15 @@ fn main() -> anyhow::Result<()> {
     let repo_path = cli.directory.unwrap_or_else(|| PathBuf::from("."));
 
     let repo = git::open_repo(&repo_path)?;
-    let (contributors, all_scanned) = git::get_contributors(&repo, cli.num_commits)?;
+    let contributors = git::get_contributors(&repo)?;
     let (commit_msg, commit_id) = git::get_latest_commit_info(&repo)?;
 
-    if contributors.is_empty() && all_scanned {
+    if contributors.is_empty() {
         eprintln!("No contributors found in git history.");
         std::process::exit(1);
     }
 
-    let mut app = App::new(contributors, commit_msg.clone(), commit_id, cli.num_commits, all_scanned);
+    let mut app = App::new(contributors, commit_msg.clone(), commit_id);
 
     let selected = ui::run(&mut app, &repo)?;
 

@@ -11,9 +11,6 @@ pub struct App {
     pub commit_id: Oid,
     pub should_quit: bool,
     pub confirmed: bool,
-    pub total_scanned: usize,
-    pub page_size: usize,
-    pub all_scanned: bool,
 }
 
 impl App {
@@ -21,8 +18,6 @@ impl App {
         contributors: Vec<Contributor>,
         commit_msg: String,
         commit_id: Oid,
-        page_size: usize,
-        all_scanned: bool,
     ) -> Self {
         let filtered: Vec<usize> = (0..contributors.len()).collect();
         Self {
@@ -35,33 +30,6 @@ impl App {
             commit_id,
             should_quit: false,
             confirmed: false,
-            total_scanned: page_size,
-            page_size,
-            all_scanned,
-        }
-    }
-
-    pub fn load_more(&mut self, new_contributors: Vec<Contributor>, all_scanned: bool) {
-        let start_idx = self.contributors.len();
-        self.contributors.extend(new_contributors);
-        self.all_scanned = all_scanned;
-        self.total_scanned += self.page_size;
-
-        // Re-filter to include new contributors
-        if self.search.is_empty() {
-            self.filtered = (0..self.contributors.len()).collect();
-        } else {
-            // Add newly matching contributors to filtered list
-            use fuzzy_matcher::FuzzyMatcher;
-            use fuzzy_matcher::skim::SkimMatcherV2;
-            let matcher = SkimMatcherV2::default();
-
-            for i in start_idx..self.contributors.len() {
-                let haystack = self.contributors[i].display();
-                if matcher.fuzzy_match(&haystack, &self.search).is_some() {
-                    self.filtered.push(i);
-                }
-            }
         }
     }
 

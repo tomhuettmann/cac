@@ -15,7 +15,7 @@ A fast terminal UI tool to amend your latest git commit with co-authors.
 ┌ Search contributors ─────────────────────────────────┐
 │ ali                                                  │
 └──────────────────────────────────────────────────────┘
-┌ Contributors (3) — scanned 100 commits ──────────────┐
+┌ Contributors (3) ────────────────────────────────────┐
 │ ✓ Alice Smith <alice@example.com>                    │
 │   Alina Mueller <alina@example.com>                  │
 │   Ali Hassan <ali.hassan@example.com>                │
@@ -66,9 +66,6 @@ cac
 
 # Specify a repository path
 cac -d /path/to/repo
-
-# Scan more commits for contributors (default: 100)
-cac -n 1000
 ```
 
 ### Controls
@@ -77,7 +74,6 @@ cac -n 1000
 |-----|--------|
 | `↑` / `↓` | Navigate contributor list |
 | `Tab` | Toggle co-author selection |
-| `l` | Load more contributors from history |
 | `Enter` | Confirm and amend commit |
 | `Esc` | Cancel (no changes) |
 | Type | Fuzzy search contributors |
@@ -91,7 +87,7 @@ cac -n 1000
 ## How It Works
 
 1. Reads your latest commit
-2. Scans git history for unique contributors (excluding yourself and noreply emails)
+2. Scans your entire git history for unique contributors (excluding yourself and noreply emails)
 3. Presents an interactive fuzzy-searchable list
 4. Amends the commit with selected `Co-authored-by:` trailers
 
