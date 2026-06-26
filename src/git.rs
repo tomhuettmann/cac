@@ -44,13 +44,13 @@ pub fn get_contributors(repo: &Repository) -> Result<Vec<Contributor>, git2::Err
         }
 
         if let Some(ref me) = myself {
-            if me.email == email {
+            if me.email.to_lowercase() == email.to_lowercase() {
                 continue;
             }
         }
 
         let contributor = Contributor { name, email };
-        if seen.insert(contributor.clone()) {
+        if seen.insert(contributor.email.to_lowercase()) {
             contributors.push(contributor);
         }
     }
@@ -140,5 +140,38 @@ mod tests {
             email: "alice@example.com".to_string(),
         };
         assert_eq!(c.display(), "Alice <alice@example.com>");
+    }
+
+    #[test]
+    fn test_case_insensitive_email_dedup() {
+        use std::collections::HashSet;
+
+        // Simulating walking through commits newest-first:
+        // First we see Alice@Example.COM, then alice@example.com (older)
+        // We should keep the first one (most recent) with its original casing
+        let mut seen = HashSet::new();
+        let mut contributors = Vec::new();
+
+        let email1 = "Alice@Example.COM".to_string();
+        let contrib1 = Contributor {
+            name: "Alice Smith".to_string(),
+            email: email1.clone(),
+        };
+        if seen.insert(contrib1.email.to_lowercase()) {
+            contributors.push(contrib1);
+        }
+
+        let email2 = "alice@example.com".to_string();
+        let contrib2 = Contributor {
+            name: "Alice Smith".to_string(),
+            email: email2,
+        };
+        if seen.insert(contrib2.email.to_lowercase()) {
+            contributors.push(contrib2);
+        }
+
+        // Should have exactly one contributor with the first variant's casing
+        assert_eq!(contributors.len(), 1);
+        assert_eq!(contributors[0].email, "Alice@Example.COM");
     }
 }
