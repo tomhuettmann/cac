@@ -47,6 +47,8 @@ pub fn run(app: &mut App, repo: &Repository) -> io::Result<Vec<Contributor>> {
                 }
                 KeyCode::Tab => {
                     app.toggle_selected();
+                    app.search.clear();
+                    app.filter();
                 }
                 KeyCode::Up => {
                     app.move_up();
