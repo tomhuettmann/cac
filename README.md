@@ -17,6 +17,7 @@ A fast terminal UI tool to amend your latest git commit with co-authors.
 └──────────────────────────────────────────────────────┘
 ┌ Contributors (3) ────────────────────────────────────┐
 │ ✓ Alice Smith <alice@example.com>                    │
+│ ──────────────────────────────────────────────────── │
 │   Alina Mueller <alina@example.com>                  │
 │   Ali Hassan <ali.hassan@example.com>                │
 └──────────────────────────────────────────────────────┘
@@ -43,6 +44,7 @@ commit → cac → push
 
 ```bash
 brew tap tomhuettmann/tap
+brew trust tomhuettmann/tap
 brew install tomhuettmann/tap/cac
 ```
 
