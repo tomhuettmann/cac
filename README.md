@@ -89,7 +89,7 @@ cac -d /path/to/repo
 ## How It Works
 
 1. Reads your latest commit
-2. Scans your entire git history for unique contributors (excluding yourself and noreply emails)
+2. Scans your entire git history for unique contributors (excluding yourself)
 3. Presents an interactive fuzzy-searchable list
 4. Amends the commit with selected `Co-authored-by:` trailers
 

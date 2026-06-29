@@ -39,10 +39,6 @@ pub fn get_contributors(repo: &Repository) -> Result<Vec<Contributor>, git2::Err
             continue;
         }
 
-        if email.contains("noreply.github.com") {
-            continue;
-        }
-
         if let Some(ref me) = myself {
             if me.email.to_lowercase() == email.to_lowercase() {
                 continue;
