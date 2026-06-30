@@ -19,13 +19,33 @@ pub fn open_repo(path: &Path) -> Result<Repository, git2::Error> {
     Repository::discover(path)
 }
 
+fn sanitize_contributors(
+    contributors: Vec<Contributor>,
+    myself: &Option<Contributor>,
+) -> Vec<Contributor> {
+    // First, deduplicate by email (case-insensitive), keeping first occurrence
+    let mut seen = HashSet::new();
+    let deduped: Vec<_> = contributors
+        .into_iter()
+        .filter(|c| seen.insert(c.email.to_lowercase()))
+        .collect();
+
+    // Then, filter out the current user
+    match myself {
+        None => deduped,
+        Some(me) => deduped
+            .into_iter()
+            .filter(|c| c.email.to_lowercase() != me.email.to_lowercase())
+            .collect(),
+    }
+}
+
 pub fn get_contributors(repo: &Repository) -> Result<Vec<Contributor>, git2::Error> {
     let mut revwalk = repo.revwalk()?;
     revwalk.push_head()?;
     revwalk.set_sorting(Sort::TIME)?;
 
     let myself = get_current_user(repo);
-    let mut seen = HashSet::new();
     let mut contributors = Vec::new();
 
     for oid in revwalk {
@@ -40,19 +60,11 @@ pub fn get_contributors(repo: &Repository) -> Result<Vec<Contributor>, git2::Err
             continue;
         }
 
-        if let Some(ref me) = myself {
-            if me.email.to_lowercase() == email.to_lowercase() {
-                continue;
-            }
-        }
-
-        let contributor = Contributor { name, email };
-        if seen.insert(contributor.email.to_lowercase()) {
-            contributors.push(contributor);
-        }
+        contributors.push(Contributor { name, email });
     }
 
-    Ok(contributors)
+    // Sanitize: deduplicate by email and filter out current user
+    Ok(sanitize_contributors(contributors, &myself))
 }
 
 pub fn load_pinned_authors(repo: &Repository) -> Vec<Contributor> {
@@ -92,17 +104,9 @@ pub fn load_pinned_authors(repo: &Repository) -> Vec<Contributor> {
         Err(_) => Vec::new(), // Failed to read, skip
     };
 
-    // Filter out the current user (same logic as get_contributors)
+    // Sanitize: deduplicate by email and filter out current user
     let myself = get_current_user(repo);
-    contributors
-        .into_iter()
-        .filter(|c| {
-            myself
-                .as_ref()
-                .map(|me| me.email.to_lowercase() != c.email.to_lowercase())
-                .unwrap_or(true)
-        })
-        .collect()
+    sanitize_contributors(contributors, &myself)
 }
 
 fn parse_authors(content: &str) -> Vec<Contributor> {
@@ -251,4 +255,150 @@ mod tests {
         assert_eq!(contributors.len(), 1);
         assert_eq!(contributors[0].email, "Alice@Example.COM");
     }
+
+    #[test]
+    fn test_sanitize_contributors_dedup() {
+        let contributors = vec![
+            Contributor {
+                name: "Alice Smith".to_string(),
+                email: "alice@example.com".to_string(),
+            },
+            Contributor {
+                name: "Bob Jones".to_string(),
+                email: "bob@example.com".to_string(),
+            },
+            Contributor {
+                name: "Alice Duplicate".to_string(),
+                email: "alice@example.com".to_string(), // Duplicate, different name
+            },
+            Contributor {
+                name: "Charlie Brown".to_string(),
+                email: "charlie@example.com".to_string(),
+            },
+        ];
+
+        let sanitized = sanitize_contributors(contributors, &None);
+
+        // Should have 3 entries (alice deduped to first, bob, charlie)
+        assert_eq!(sanitized.len(), 3);
+        assert_eq!(sanitized[0].name, "Alice Smith"); // First occurrence kept
+        assert_eq!(sanitized[1].name, "Bob Jones");
+        assert_eq!(sanitized[2].name, "Charlie Brown");
+    }
+
+    #[test]
+    fn test_sanitize_contributors_case_insensitive_dedup() {
+        let contributors = vec![
+            Contributor {
+                name: "Alice".to_string(),
+                email: "Alice@Example.COM".to_string(),
+            },
+            Contributor {
+                name: "Alice Again".to_string(),
+                email: "alice@example.com".to_string(), // Different case
+            },
+        ];
+
+        let sanitized = sanitize_contributors(contributors, &None);
+
+        // Should have 1 entry (case-insensitive match)
+        assert_eq!(sanitized.len(), 1);
+        assert_eq!(sanitized[0].name, "Alice"); // First occurrence kept with original casing
+        assert_eq!(sanitized[0].email, "Alice@Example.COM");
+    }
+
+    #[test]
+    fn test_sanitize_contributors_filters_self() {
+        let myself = Some(Contributor {
+            name: "Tom".to_string(),
+            email: "tom@example.com".to_string(),
+        });
+
+        let contributors = vec![
+            Contributor {
+                name: "Alice".to_string(),
+                email: "alice@example.com".to_string(),
+            },
+            Contributor {
+                name: "Tom".to_string(),
+                email: "tom@example.com".to_string(),
+            },
+            Contributor {
+                name: "Bob".to_string(),
+                email: "bob@example.com".to_string(),
+            },
+        ];
+
+        let sanitized = sanitize_contributors(contributors, &myself);
+
+        // Should have 2 entries (tom filtered out)
+        assert_eq!(sanitized.len(), 2);
+        assert_eq!(sanitized[0].name, "Alice");
+        assert_eq!(sanitized[1].name, "Bob");
+    }
+
+    #[test]
+    fn test_sanitize_contributors_filters_self_case_insensitive() {
+        let myself = Some(Contributor {
+            name: "Tom".to_string(),
+            email: "Tom@Example.COM".to_string(),
+        });
+
+        let contributors = vec![
+            Contributor {
+                name: "Alice".to_string(),
+                email: "alice@example.com".to_string(),
+            },
+            Contributor {
+                name: "Tom".to_string(),
+                email: "tom@example.com".to_string(), // Different case
+            },
+        ];
+
+        let sanitized = sanitize_contributors(contributors, &myself);
+
+        // Should have 1 entry (tom filtered out despite different case)
+        assert_eq!(sanitized.len(), 1);
+        assert_eq!(sanitized[0].name, "Alice");
+    }
+
+    #[test]
+    fn test_sanitize_contributors_dedup_and_filter_self() {
+        let myself = Some(Contributor {
+            name: "Tom".to_string(),
+            email: "tom@example.com".to_string(),
+        });
+
+        let contributors = vec![
+            Contributor {
+                name: "Alice".to_string(),
+                email: "alice@example.com".to_string(),
+            },
+            Contributor {
+                name: "Alice Duplicate".to_string(),
+                email: "alice@example.com".to_string(), // Duplicate
+            },
+            Contributor {
+                name: "Tom".to_string(),
+                email: "tom@example.com".to_string(),
+            },
+            Contributor {
+                name: "Bob".to_string(),
+                email: "bob@example.com".to_string(),
+            },
+            Contributor {
+                name: "Tom Again".to_string(),
+                email: "tom@example.com".to_string(), // Duplicate self
+            },
+        ];
+
+        let sanitized = sanitize_contributors(contributors, &myself);
+
+        // Should have 2 entries: alice (first occurrence), bob (toms filtered out)
+        assert_eq!(sanitized.len(), 2);
+        assert_eq!(sanitized[0].name, "Alice");
+        assert_eq!(sanitized[1].name, "Bob");
+    }
 }
+
+
