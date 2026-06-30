@@ -33,6 +33,7 @@ commit → cac → push
 ## Features
 
 - **Smart Contributor Discovery**: Scans your git history to find contributors automatically
+- **Pinned Authors**: Predefine team members in `~/.config/cac/authors` — useful for teammates who haven't committed to this repo yet
 - **Fuzzy Search**: Quickly filter contributors by name or email
 - **Multi-select**: Add multiple co-authors at once
 - **Amend Mode**: Modifies your latest commit in-place — no extra commits
@@ -70,6 +71,19 @@ cac
 cac -d /path/to/repo
 ```
 
+### Pinned Authors
+
+Predefine authors in `~/.config/cac/authors` to have them appear at the top of the contributor list. The file is created automatically on first run with a template entry.
+
+```
+# cac authors — add one author per line in "Name <email>" format
+# Lines starting with # are comments
+Alice Example <alice@example.com>
+Bob Builder <bob@example.com>
+```
+
+Authors from this file always appear first, in file order, followed by contributors discovered from git history. Duplicates are automatically removed (matched by email, case-insensitive). Your own entry is filtered out automatically.
+
 ### Controls
 
 | Key | Action |
@@ -88,10 +102,11 @@ cac -d /path/to/repo
 
 ## How It Works
 
-1. Reads your latest commit
+1. Loads pinned authors from `~/.config/cac/authors`
 2. Scans your entire git history for unique contributors (excluding yourself)
-3. Presents an interactive fuzzy-searchable list
-4. Amends the commit with selected `Co-authored-by:` trailers
+3. Merges the lists: pinned authors first, then git history contributors (deduplicated)
+4. Presents an interactive fuzzy-searchable list
+5. Amends the commit with selected `Co-authored-by:` trailers
 
 ```
 Your commit message

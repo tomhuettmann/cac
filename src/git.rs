@@ -1,5 +1,6 @@
 use git2::{Oid, Repository, Sort};
 use std::collections::HashSet;
+use std::fs;
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -52,6 +53,86 @@ pub fn get_contributors(repo: &Repository) -> Result<Vec<Contributor>, git2::Err
     }
 
     Ok(contributors)
+}
+
+pub fn load_pinned_authors(repo: &Repository) -> Vec<Contributor> {
+    let authors_file = match dirs::home_dir() {
+        Some(home) => home.join(".config").join("cac").join("authors"),
+        None => return Vec::new(), // No home dir found, skip
+    };
+
+    // If file doesn't exist, create it with a template
+    if !authors_file.exists() {
+        if let Err(_) = fs::create_dir_all(authors_file.parent().unwrap_or_else(|| Path::new("."))) {
+            return Vec::new(); // Failed to create dir, skip
+        }
+
+        // Try to read current user to pre-fill the file
+        let template = if let Some(user) = get_current_user(repo) {
+            format!(
+                "# cac authors — add one author per line in \"Name <email>\" format\n\
+                 # Lines starting with # are comments and are ignored\n\
+                 # Your own entry below is just a format example — it is filtered out automatically\n\
+                 {} <{}>\n",
+                user.name, user.email
+            )
+        } else {
+            "# cac authors — add one author per line in \"Name <email>\" format\n\
+             # Lines starting with # are comments and are ignored\n"
+                .to_string()
+        };
+
+        let _ = fs::write(&authors_file, template);
+        return Vec::new(); // Return empty on first creation
+    }
+
+    // File exists, parse it
+    let contributors = match fs::read_to_string(&authors_file) {
+        Ok(content) => parse_authors(&content),
+        Err(_) => Vec::new(), // Failed to read, skip
+    };
+
+    // Filter out the current user (same logic as get_contributors)
+    let myself = get_current_user(repo);
+    contributors
+        .into_iter()
+        .filter(|c| {
+            myself
+                .as_ref()
+                .map(|me| me.email.to_lowercase() != c.email.to_lowercase())
+                .unwrap_or(true)
+        })
+        .collect()
+}
+
+fn parse_authors(content: &str) -> Vec<Contributor> {
+    let mut contributors = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // Skip empty lines and comments
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        // Parse "Name <email>" format
+        if let Some(email_start) = trimmed.rfind('<') {
+            if let Some(email_end) = trimmed.rfind('>') {
+                if email_start < email_end {
+                    let name = trimmed[..email_start].trim().to_string();
+                    let email = trimmed[email_start + 1..email_end].trim().to_string();
+
+                    if !name.is_empty() && !email.is_empty() {
+                        contributors.push(Contributor { name, email });
+                    }
+                }
+            }
+        }
+        // Malformed lines are silently skipped
+    }
+
+    contributors
 }
 
 pub fn get_latest_commit_info(repo: &Repository) -> Result<(String, Oid), git2::Error> {
